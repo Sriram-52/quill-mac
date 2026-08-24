@@ -24,7 +24,19 @@ Quill sits in your menu bar and works in every app. Select a sentence and a card
 
 ## Install
 
-There is no prebuilt binary yet; build from source (about 10 seconds):
+### Download (recommended)
+
+1. Grab the latest `Quill-x.y.z.dmg` from the [Releases page](https://github.com/Sriram-52/quill-mac/releases).
+2. Open the DMG and drag `Quill` to Applications.
+3. The build is not notarized, so clear the quarantine flag once:
+   `xattr -dr com.apple.quarantine /Applications/Quill.app` (or right-click the app and choose Open).
+4. Launch Quill and grant Accessibility permission when prompted
+   (System Settings > Privacy & Security > Accessibility > enable Quill).
+
+Quill is menu-bar only (pencil icon), with no Dock icon. New versions appear on
+the Releases page; download and replace the app to update.
+
+### Build from source
 
 ```sh
 git clone https://github.com/Sriram-52/quill-mac.git
@@ -33,12 +45,10 @@ scripts/make-app.sh
 open /Applications/Quill.app
 ```
 
-On first launch, grant Accessibility permission when prompted
-(System Settings > Privacy & Security > Accessibility > enable Quill).
-Quill is menu-bar only (pencil icon), with no Dock icon.
-
-The build is ad-hoc signed. macOS may drop the Accessibility grant after a rebuild;
-remove and re-add Quill in that list if selections stop reacting.
+`scripts/make-app.sh` builds, signs (ad-hoc), and installs to `/Applications`.
+Pass `--no-install` to only produce `build/Quill.app`. macOS may drop the
+Accessibility grant after a rebuild; remove and re-add Quill in that list if
+selections stop reacting.
 
 ## How it works
 

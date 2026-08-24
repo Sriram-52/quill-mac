@@ -1,0 +1,68 @@
+name: Release
+
+# Build and publish an ad-hoc signed arm64 DMG (and zip) whenever a version tag is pushed.
+#   git tag v0.1.0 && git push origin v0.1.0
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write # create the GitHub Release and upload assets
+
+jobs:
+  release:
+    name: Build DMG (macOS arm64)
+    # Foundation Models needs the macOS 26 SDK, so this must be a Tahoe runner.
+    runs-on: macos-26
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Select Xcode 26
+        run: |
+          XCODE=$(ls -d /Applications/Xcode_26*.app 2>/dev/null | sort -V | tail -1)
+          if [ -n "$XCODE" ]; then sudo xcode-select -s "$XCODE"; fi
+          xcodebuild -version
+
+      - name: Build Quill.app (ad-hoc signed)
+        run: scripts/make-app.sh --no-install
+        env:
+          QUILL_VERSION: ${{ github.ref_name }}
+          QUILL_BUILD: ${{ github.run_number }}
+
+      - name: Package DMG and zip
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          mkdir -p build/dmg
+          cp -R build/Quill.app build/dmg/
+          ln -s /Applications build/dmg/Applications
+          hdiutil create -volname "Quill" -srcfolder build/dmg -ov -format UDZO "build/Quill-${VERSION}.dmg"
+          ditto -c -k --keepParent build/Quill.app "build/Quill-${VERSION}.zip"
+          shasum -a 256 build/Quill-${VERSION}.dmg build/Quill-${VERSION}.zip > build/SHA256SUMS.txt
+
+      - name: Publish GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/*.dmg
+            build/*.zip
+            build/SHA256SUMS.txt
+          fail_on_unmatched_files: true
+          generate_release_notes: true
+          body: |
+            ## Quill ${{ github.ref_name }}
+
+            On-device writing assistant for macOS. Requires an **Apple Silicon Mac on macOS 26** with Apple Intelligence enabled.
+
+            ### Install
+            1. Open the DMG and drag **Quill** to Applications.
+            2. The app is **ad-hoc signed** (free, not notarized), so macOS blocks the first launch. To open it, either:
+               - **System Settings → Privacy & Security → Open Anyway**, or
+               - run once in Terminal:
+                 ```
+                 xattr -dr com.apple.quarantine /Applications/Quill.app
+                 ```
+            3. Launch Quill (menu-bar pencil icon) and grant **Accessibility** permission when prompted.
+
+            ### Update
+            Download the new DMG and replace the app in Applications. Re-grant Accessibility if prompted.
