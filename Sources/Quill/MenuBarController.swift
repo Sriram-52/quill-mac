@@ -32,6 +32,16 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         let status = NSMenuItem(title: statusText, action: nil, keyEquivalent: "")
         menu.addItem(status)
+        if statusText.hasPrefix("Waiting for Accessibility") {
+            let hint = NSMenuItem(
+                title: "If Quill is already listed there, remove it (−) and add it again",
+                action: nil, keyEquivalent: ""
+            )
+            menu.addItem(hint)
+            let open = NSMenuItem(title: "Open Accessibility Settings…", action: #selector(openAccessibilitySettings), keyEquivalent: "")
+            open.target = self
+            menu.addItem(open)
+        }
         menu.addItem(.separator())
 
         let pause = NSMenuItem(
@@ -77,6 +87,12 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Quill", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
+
+    @objc private func openAccessibilitySettings() {
+        if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility") {
+            NSWorkspace.shared.open(url)
+        }
     }
 
     @objc private func togglePause() {
