@@ -53,6 +53,7 @@ final class SelectionWatcher {
     }
 
     fileprivate func handleAXNotification(_ name: String) {
+        qlog.notice("ax event \(name, privacy: .public)")
         if name == kAXFocusedUIElementChangedNotification {
             debounceTask?.cancel()
             typingDebounceTask?.cancel()
@@ -91,6 +92,7 @@ final class SelectionWatcher {
         AXObserverAddNotification(obs, appEl, kAXValueChangedNotification as CFString, refcon)
         CFRunLoopAddSource(CFRunLoopGetMain(), AXObserverGetRunLoopSource(obs), .defaultMode)
 
+        qlog.notice("attached to \(app.localizedName ?? "?", privacy: .public) (\(app.bundleIdentifier ?? "?", privacy: .public))")
         observer = obs
         appElement = appEl
         observedPid = pid
@@ -137,10 +139,11 @@ final class SelectionWatcher {
     private func emitTyping() {
         guard Date() >= suppressUntil, let appElement else { return }
         guard let element = AX.focusedElement(in: appElement),
-              !AX.isSecure(element), AX.isEditable(element) else { return }
+              !AX.isSecure(element), AX.isEditable(element) else { qlog.notice("typing: no editable focused element"); return }
         // An active selection belongs to the selection flow, not typing.
         guard (AX.selectedText(of: element) ?? "").isEmpty else { return }
-        guard let text = AX.value(of: element), !text.isEmpty else { return }
+        guard let text = AX.value(of: element), !text.isEmpty else { qlog.notice("typing: field value empty/unreadable"); return }
+        qlog.notice("typing: \(text.count) chars in field, frame \(AX.frameCocoa(of: element) != nil ? "ok" : "missing", privacy: .public)")
         onTyping?(TypingContext(
             text: text,
             element: element,
@@ -154,15 +157,19 @@ final class SelectionWatcher {
     private func emitSelection() {
         guard Date() >= suppressUntil, let appElement else { return }
         guard let element = AX.focusedElement(in: appElement) else {
+            qlog.notice("selection: no focused element")
             onSelectionCleared?()
             return
         }
-        guard !AX.isSecure(element) else { return }
+        let role = AX.role(of: element) ?? "nil", subrole = AX.subrole(of: element) ?? "nil"
+        guard !AX.isSecure(element) else { qlog.notice("selection: secure field, skip"); return }
         guard AX.isEditable(element) else {
+            qlog.notice("selection: not editable (role \(role, privacy: .public), subrole \(subrole, privacy: .public)), skip")
             onSelectionCleared?()
             return
         }
         let text = AX.selectedText(of: element) ?? ""
+        qlog.notice("selection: role \(role, privacy: .public) editable, \(text.count) chars selected")
         guard !text.isEmpty else {
             onSelectionCleared?()
             return

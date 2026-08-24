@@ -28,6 +28,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         if AXIsProcessTrustedWithOptions(options) {
             startWatching()
         } else {
+            qlog.notice("accessibility not trusted yet")
             menuBar.setStatus("Waiting for Accessibility permission…")
             trustTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] timer in
                 if AXIsProcessTrusted() {
@@ -39,6 +40,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func startWatching() {
+        qlog.notice("watching started; \(self.engine.statusDescription, privacy: .public)")
         menuBar.setStatus(engine.statusDescription)
         let watcher = SelectionWatcher()
         watcher.onSelection = { [weak self] selection in
@@ -62,8 +64,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func handleSelection(_ selection: TextSelection) {
-        guard !settings.isPaused, engine.isAvailable else { return }
-        guard !settings.isDenied(selection.bundleID) else { return }
+        guard !settings.isPaused else { qlog.notice("check skipped: paused"); return }
+        guard engine.isAvailable else { qlog.notice("check skipped: engine unavailable: \(self.engine.statusDescription, privacy: .public)"); return }
+        guard !settings.isDenied(selection.bundleID) else { qlog.notice("check skipped: app denylisted"); return }
 
         let trimmed = selection.text.trimmingCharacters(in: .whitespacesAndNewlines)
         guard trimmed.count >= 4, trimmed.count <= 2000,
@@ -84,8 +87,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         checkTask = Task { [weak self] in
             guard let self else { return }
             do {
+                let started = Date()
                 let corrected = try await engine.proofread(trimmed)
                     .trimmingCharacters(in: .whitespacesAndNewlines)
+                qlog.notice("proofread done in \(Int(Date().timeIntervalSince(started) * 1000)) ms, changed: \(corrected != trimmed)")
                 guard !Task.isCancelled else { return }
                 lastResult = (text: trimmed, corrected: corrected)
                 present(selection: selection, trimmed: trimmed, corrected: corrected)
