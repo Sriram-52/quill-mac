@@ -68,6 +68,7 @@ enum EngineError: LocalizedError {
 /// A pluggable writing engine. The automatic selection check always uses the
 /// on-device engine; explicit actions (Rephrase/Improve) use whichever engine
 /// the user picked in the menu bar.
+@MainActor
 protocol WritingEngine {
     var id: String { get }
     var displayName: String { get }

@@ -9,6 +9,7 @@ struct RewriteOutput {
 
 /// On-device engine. Powers the automatic selection check and all explicit
 /// actions (Rephrase/Improve) — never cloud.
+@MainActor
 final class FoundationModelsEngine: WritingEngine {
     let id = "apple-fm"
     let displayName = "Apple Intelligence (on-device)"
@@ -35,7 +36,63 @@ final class FoundationModelsEngine: WritingEngine {
         session.prewarm()
     }
 
+    /// Paragraph-level results for proofreading, so retyping one paragraph
+    /// doesn't re-check the others. Bounded; oldest entries evicted.
+    private var proofreadCache: [String: String] = [:]
+    private var proofreadOrder: [String] = []
+
+    /// The small model flattens multi-paragraph input into one block, which
+    /// then shows up as bogus "corrections". Process paragraph by paragraph
+    /// and reassemble with the original line breaks untouched.
     func perform(_ action: WritingAction, on text: String) async throws -> String {
+        var output = ""
+        for piece in Self.splitParagraphs(text) {
+            if piece.isBreak || piece.text.trimmingCharacters(in: .whitespaces).isEmpty {
+                output += piece.text
+                continue
+            }
+            let leading = String(piece.text.prefix(while: { $0 == " " || $0 == "\t" }))
+            let trailing = String(piece.text.reversed().prefix(while: { $0 == " " || $0 == "\t" }).reversed())
+            let core = String(piece.text.dropFirst(leading.count).dropLast(trailing.count))
+            output += leading + (try await performParagraph(action, on: core)) + trailing
+        }
+        return output
+    }
+
+    private func performParagraph(_ action: WritingAction, on text: String) async throws -> String {
+        if action == .proofread, let cached = proofreadCache[text] { return cached }
+        let result = try await performSingle(action, on: text)
+        if action == .proofread {
+            proofreadCache[text] = result
+            proofreadOrder.append(text)
+            if proofreadOrder.count > 300 {
+                proofreadCache.removeValue(forKey: proofreadOrder.removeFirst())
+            }
+        }
+        return result
+    }
+
+    struct Piece { let text: String; let isBreak: Bool }
+
+    /// Splits into alternating paragraph and line-break runs, lossless.
+    static func splitParagraphs(_ text: String) -> [Piece] {
+        var pieces: [Piece] = []
+        var current = ""
+        var currentIsBreak = false
+        for ch in text {
+            let isBreak = ch == "\n" || ch == "\r" || ch == "\u{2029}" || ch == "\u{2028}"
+            if !current.isEmpty && isBreak != currentIsBreak {
+                pieces.append(Piece(text: current, isBreak: currentIsBreak))
+                current = ""
+            }
+            current.append(ch)
+            currentIsBreak = isBreak
+        }
+        if !current.isEmpty { pieces.append(Piece(text: current, isBreak: currentIsBreak)) }
+        return pieces
+    }
+
+    private func performSingle(_ action: WritingAction, on text: String) async throws -> String {
         let session = LanguageModelSession(instructions: action.instructions)
         let response = try await session.respond(
             to: "\(action.userPrefix)\n\n\(text)",
