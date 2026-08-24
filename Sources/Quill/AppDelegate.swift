@@ -24,6 +24,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     private func ensureAccessibility() {
+        if !AXIsProcessTrusted() {
+            clearStaleAccessibilityGrantOnce()
+        }
         let options = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
         if AXIsProcessTrustedWithOptions(options) {
             startWatching()
@@ -36,6 +39,28 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                     Task { @MainActor in self?.startWatching() }
                 }
             }
+        }
+    }
+
+    /// After an update the old Accessibility grant no longer matches this
+    /// build's signature, so the toggle in System Settings looks "on" while
+    /// Quill is untrusted. `tccutil reset` clears our own entry (no admin
+    /// needed) so the normal prompt appears again. Runs at most once per build.
+    private func clearStaleAccessibilityGrantOnce() {
+        guard let bundleID = Bundle.main.bundleIdentifier else { return }
+        let build = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "0"
+        let key = "quill.tccResetBuild"
+        guard UserDefaults.standard.string(forKey: key) != build else { return }
+        UserDefaults.standard.set(build, forKey: key)
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: "/usr/bin/tccutil")
+        process.arguments = ["reset", "Accessibility", bundleID]
+        do {
+            try process.run()
+            process.waitUntilExit()
+            qlog.notice("tccutil reset Accessibility exited \(process.terminationStatus)")
+        } catch {
+            qlog.notice("tccutil reset failed: \(error.localizedDescription, privacy: .public)")
         }
     }
 
