@@ -7,7 +7,7 @@
 	<key>CFBundleDisplayName</key>
 	<string>Quill</string>
 	<key>CFBundleIdentifier</key>
-	<string>com.sriram.quill</string>
+	<string>dev.codebyram.quill</string>
 	<key>CFBundleExecutable</key>
 	<string>Quill</string>
 	<key>CFBundleIconFile</key>

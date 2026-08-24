@@ -2,8 +2,8 @@ import AppKit
 import ApplicationServices
 import os
 
-/// Diagnostics: `log show --last 5m --predicate 'subsystem == "com.sriram.quill"'`
-let qlog = Logger(subsystem: "com.sriram.quill", category: "quill")
+/// Diagnostics: `log show --last 5m --predicate 'subsystem == "dev.codebyram.quill"'`
+let qlog = Logger(subsystem: "dev.codebyram.quill", category: "quill")
 
 /// A snapshot of a text selection in another app, captured at check time.
 struct TextSelection {
