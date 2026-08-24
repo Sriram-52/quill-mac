@@ -65,4 +65,4 @@ jobs:
             3. Launch Quill (menu-bar pencil icon) and grant **Accessibility** permission when prompted.
 
             ### Update
-            Download the new DMG and replace the app in Applications. Re-grant Accessibility if prompted.
+            Download the new DMG and replace the app in Applications. If Quill shows "Waiting for Accessibility permission", the old grant is stale: in System Settings → Privacy & Security → Accessibility, remove Quill (−), relaunch, and grant again.

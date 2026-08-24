@@ -34,7 +34,9 @@ Quill sits in your menu bar and works in every app. Select a sentence and a card
    (System Settings > Privacy & Security > Accessibility > enable Quill).
 
 Quill is menu-bar only (pencil icon), with no Dock icon. New versions appear on
-the Releases page; download and replace the app to update.
+the Releases page; download and replace the app to update. If Quill then shows
+"Waiting for Accessibility permission", the old grant is stale: remove Quill from
+the Accessibility list (−), relaunch, and grant again.
 
 ### Build from source
 
