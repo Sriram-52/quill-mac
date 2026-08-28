@@ -21,6 +21,10 @@ final class SelectionWatcher {
     /// Fired when the selection empties — dismiss the card, keep the badge.
     var onSelectionCleared: (() -> Void)?
 
+    /// Decides which focused elements are writing surfaces. Supplied by the
+    /// app so the policy can see user settings.
+    var policy: FieldPolicy?
+
     private(set) var currentTarget: (name: String, bundleID: String)?
 
     private var observer: AXObserver?
@@ -138,8 +142,14 @@ final class SelectionWatcher {
 
     private func emitTyping() {
         guard Date() >= suppressUntil, let appElement else { return }
-        guard let element = AX.focusedElement(in: appElement),
-              !AX.isSecure(element), AX.isEditable(element) else { qlog.notice("typing: no editable focused element"); return }
+        guard let element = AX.focusedElement(in: appElement) else { qlog.notice("typing: no focused element"); return }
+        if let policy {
+            let decision = policy.evaluate(element: element, bundleID: observedBundleID)
+            guard decision.isAllowed else {
+                qlog.notice("typing: skipped, \(decision.reason, privacy: .public)")
+                return
+            }
+        }
         // An active selection belongs to the selection flow, not typing.
         guard (AX.selectedText(of: element) ?? "").isEmpty else { return }
         guard let text = AX.value(of: element), !text.isEmpty else { qlog.notice("typing: field value empty/unreadable"); return }
@@ -162,14 +172,16 @@ final class SelectionWatcher {
             return
         }
         let role = AX.role(of: element) ?? "nil", subrole = AX.subrole(of: element) ?? "nil"
-        guard !AX.isSecure(element) else { qlog.notice("selection: secure field, skip"); return }
-        guard AX.isEditable(element) else {
-            qlog.notice("selection: not editable (role \(role, privacy: .public), subrole \(subrole, privacy: .public)), skip")
-            onSelectionCleared?()
-            return
+        if let policy {
+            let decision = policy.evaluate(element: element, bundleID: observedBundleID)
+            guard decision.isAllowed else {
+                qlog.notice("selection: skipped (role \(role, privacy: .public), subrole \(subrole, privacy: .public)): \(decision.reason, privacy: .public)")
+                onSelectionCleared?()
+                return
+            }
         }
         let text = AX.selectedText(of: element) ?? ""
-        qlog.notice("selection: role \(role, privacy: .public) editable, \(text.count) chars selected")
+        qlog.notice("selection: role \(role, privacy: .public) accepted, \(text.count) chars selected")
         guard !text.isEmpty else {
             onSelectionCleared?()
             return

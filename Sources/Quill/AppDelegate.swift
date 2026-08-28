@@ -68,6 +68,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         qlog.notice("watching started; \(self.engine.statusDescription, privacy: .public)")
         menuBar.setStatus(engine.statusDescription)
         let watcher = SelectionWatcher()
+        watcher.policy = FieldPolicy(settings: settings)
         watcher.onSelection = { [weak self] selection in
             self?.handleSelection(selection)
         }

@@ -11,7 +11,13 @@ cd "$(dirname "$0")/.."
 VERSION="${QUILL_VERSION:-0.1.0}"
 BUILD="${QUILL_BUILD:-1}"
 
-swift build -c release
+# A swiftly-managed `swift` on PATH can point at a toolchain that is no longer
+# installed. Prefer the Xcode/Command Line Tools toolchain, which is what this
+# package targets anyway, and fall back to whatever `swift` resolves to.
+SWIFT=(xcrun --toolchain default swift)
+"${SWIFT[@]}" --version >/dev/null 2>&1 || SWIFT=(swift)
+
+"${SWIFT[@]}" build -c release
 
 APP="build/Quill.app"
 rm -rf "$APP"

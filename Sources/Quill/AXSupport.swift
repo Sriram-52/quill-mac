@@ -32,6 +32,19 @@ struct TypingContext {
     let fieldFrame: CGRect?
 }
 
+/// The three ways Quill can treat a focused element. Modeled on Grammarly
+/// Desktop's rule engine, where every single-line field is off until a rule
+/// explicitly opts it in.
+enum FieldSurface {
+    /// Multi-line editors and contenteditable regions: checked by default.
+    case prose
+    /// Single-line text fields and combo boxes: off unless the app is opted
+    /// in, because this is the shape of address bars and login forms.
+    case singleLine
+    /// Search fields, labels, and anything that will not accept a write.
+    case ineligible
+}
+
 enum AX {
     static func attribute<T>(_ element: AXUIElement, _ name: String) -> T? {
         var ref: CFTypeRef?
@@ -85,33 +98,83 @@ enum AX {
         role(of: element) == "AXSecureTextField" || subrole(of: element) == "AXSecureTextField"
     }
 
-    /// Whether the element plausibly accepts text edits. Read-only text
-    /// (labels, rendered chat transcripts, web page prose) should get no
-    /// card at all. Signals are layered because Electron/Chromium and native
-    /// apps report editability differently.
-    static func isEditable(_ element: AXUIElement) -> Bool {
-        switch role(of: element) {
-        case "AXStaticText":
-            return false
-        case "AXTextField", "AXTextArea", "AXComboBox", "AXSearchField":
-            return true
+    /// Where a focused element sits on the spectrum from "prose the user is
+    /// writing" to "a one-line control that merely holds text". Role alone was
+    /// never enough: a browser address bar, a login box, and a Gmail subject
+    /// line are all `AXTextField`, which is why single-line controls are their
+    /// own category rather than simply "editable".
+    static func surface(of element: AXUIElement) -> FieldSurface {
+        if isSecure(element) { return .ineligible }
+        let role = role(of: element)
+        let subrole = subrole(of: element)
+        if subrole == "AXSearchField" { return .ineligible }
+        switch role {
+        case "AXStaticText", "AXSearchField", "AXMenuItem", "AXButton", "AXCheckBox", "AXRadioButton":
+            return .ineligible
+        case "AXTextArea":
+            return .prose
+        case "AXTextField", "AXComboBox":
+            return .singleLine
         default:
             break
         }
+        // WebKit/Chromium expose this on nodes inside contenteditable regions.
+        if let _: CFTypeRef = attribute(element, "AXEditableAncestor") {
+            return .prose
+        }
+        // Custom native and Electron views report roles we do not recognise.
+        // If they will accept a write, treat them as prose: the named
+        // single-line roles were already ruled out above.
         var settable = DarwinBoolean(false)
         if AXUIElementIsAttributeSettable(element, kAXSelectedTextAttribute as CFString, &settable) == .success,
            settable.boolValue {
-            return true
+            return .prose
         }
         if AXUIElementIsAttributeSettable(element, kAXValueAttribute as CFString, &settable) == .success,
            settable.boolValue {
-            return true
+            return .prose
         }
-        // WebKit/Chromium expose this on nodes inside contenteditable regions.
-        if let _: CFTypeRef = attribute(element, "AXEditableAncestor") {
-            return true
+        return .ineligible
+    }
+
+    /// Attributes that carry a human- or developer-assigned name for the
+    /// element. The name blocklist matches against all of them, because apps
+    /// disagree about which one they populate: native apps favour `AXTitle`,
+    /// web content usually only has `AXDOMIdentifier` or a placeholder.
+    private static let nameAttributes = [
+        kAXTitleAttribute,
+        kAXDescriptionAttribute,
+        kAXPlaceholderValueAttribute,
+        kAXIdentifierAttribute,
+        "AXDOMIdentifier",
+    ]
+
+    static func names(of element: AXUIElement) -> [String] {
+        nameAttributes.compactMap { name -> String? in
+            guard let value: String = attribute(element, name), !value.isEmpty else { return nil }
+            return value
         }
-        return false
+    }
+
+    static func parent(of element: AXUIElement) -> AXUIElement? {
+        var ref: CFTypeRef?
+        guard AXUIElementCopyAttributeValue(element, kAXParentAttribute as CFString, &ref) == .success,
+              let ref, CFGetTypeID(ref) == AXUIElementGetTypeID() else { return nil }
+        return (ref as! AXUIElement)
+    }
+
+    /// The element's own names plus those of its nearest ancestors, up to
+    /// `depth` levels. Window titles come along for the ride at the top of the
+    /// chain, which is what catches a field sitting on a page titled "Sign in".
+    static func namesIncludingAncestors(of element: AXUIElement, depth: Int = 6) -> [String] {
+        var collected = names(of: element)
+        var current = element
+        for _ in 0..<depth {
+            guard let next = parent(of: current) else { break }
+            collected.append(contentsOf: names(of: next))
+            current = next
+        }
+        return collected
     }
 
     /// Bounds of the current selection, converted from AX (top-left origin,

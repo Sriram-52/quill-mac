@@ -70,6 +70,19 @@ final class MenuBarController: NSObject, NSMenuDelegate {
             item.target = self
             item.representedObject = target.bundleID
             menu.addItem(item)
+
+            // The escape hatch for the single-line gate. Off everywhere by
+            // default so address bars and login boxes stay quiet; turn it on
+            // for an app whose real writing happens on one line.
+            let singleLine = NSMenuItem(
+                title: "Check Single-Line Fields in \(target.name)",
+                action: #selector(toggleSingleLine(_:)),
+                keyEquivalent: ""
+            )
+            singleLine.target = self
+            singleLine.representedObject = target.bundleID
+            singleLine.state = settings.allowsSingleLine(target.bundleID) ? .on : .off
+            menu.addItem(singleLine)
         }
 
         if !settings.denylist.isEmpty {
@@ -101,6 +114,11 @@ final class MenuBarController: NSObject, NSMenuDelegate {
 
     @objc private func togglePassive() {
         settings.passiveEnabled.toggle()
+    }
+
+    @objc private func toggleSingleLine(_ sender: NSMenuItem) {
+        guard let bundleID = sender.representedObject as? String else { return }
+        settings.setAllowsSingleLine(!settings.allowsSingleLine(bundleID), for: bundleID)
     }
 
     @objc private func denyTarget(_ sender: NSMenuItem) {

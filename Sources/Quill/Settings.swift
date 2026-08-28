@@ -6,6 +6,7 @@ final class Settings {
     private static let pausedKey = "quill.paused"
     private static let denylistKey = "quill.denylist"
     private static let seededKey = "quill.denylist.seeded"
+    private static let singleLineKey = "quill.singleLineApps"
 
     /// Apps where grammar cards are noise, disabled out of the box.
     /// Re-enable any of them from the menu.
@@ -17,6 +18,12 @@ final class Settings {
     ]
 
     private(set) var denylist: Set<String>
+
+    /// Apps where single-line text fields are checked too. Off everywhere by
+    /// default: address bars, login boxes and form controls are all
+    /// single-line, and a card over any of them is pure noise. See
+    /// `FieldPolicy` for the rest of the gate.
+    private(set) var singleLineApps: Set<String>
 
     var isPaused: Bool {
         get { defaults.bool(forKey: Self.pausedKey) }
@@ -37,6 +44,7 @@ final class Settings {
             defaults.set(true, forKey: Self.seededKey)
         }
         denylist = Set(defaults.stringArray(forKey: Self.denylistKey) ?? [])
+        singleLineApps = Set(defaults.stringArray(forKey: Self.singleLineKey) ?? [])
     }
 
     func deny(_ bundleID: String) {
@@ -52,6 +60,20 @@ final class Settings {
     func isDenied(_ bundleID: String?) -> Bool {
         guard let bundleID else { return false }
         return denylist.contains(bundleID)
+    }
+
+    func setAllowsSingleLine(_ allowed: Bool, for bundleID: String) {
+        if allowed {
+            singleLineApps.insert(bundleID)
+        } else {
+            singleLineApps.remove(bundleID)
+        }
+        defaults.set(Array(singleLineApps).sorted(), forKey: Self.singleLineKey)
+    }
+
+    func allowsSingleLine(_ bundleID: String?) -> Bool {
+        guard let bundleID else { return false }
+        return singleLineApps.contains(bundleID)
     }
 
     private func persist() {

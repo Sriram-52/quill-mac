@@ -43,9 +43,35 @@ remains as a seam in case that ever changes.
   focus, and value changes. 350 ms debounce for selections, 1.6 s for typing.
   Secure fields and non-editable elements are skipped. Chromium's caret
   movement doubles as the typing signal because it rarely emits value-changed.
-- **Editability detection** layers four signals: role allowlist, static-text
-  blocklist, settable-attribute probes, and `AXEditableAncestor` for
-  contenteditable regions. This is the most app-dependent part of the code.
+- **Field policy** (`FieldPolicy.swift`) decides which focused elements are
+  writing surfaces. Role alone was never enough: a browser address bar, a login
+  box and a Gmail subject line are all `AXTextField`, so Quill used to pop up in
+  all three. Four gates, modeled on Grammarly Desktop's `IntegrationOptions.json`
+  and `IntegrationOptionsKeywordBlocklist.json`:
+  1. **Surface class.** `AXTextArea` and contenteditable regions
+     (`AXEditableAncestor`, or an unrecognised role with a settable value) are
+     prose and pass by default. `AXTextField` and `AXComboBox` are single-line
+     and are **off unless the app is opted in**. Search fields, labels, secure
+     fields and read-only views never pass. This gate alone is what stops the
+     address-bar popups.
+  2. **Override rules**, bundled in `FieldPolicy.defaultRules` and extensible
+     from `~/Library/Application Support/Quill/FieldPolicy.json`. Regex on
+     bundle ID and element name, with `allowSingleLine`, `ignoreNameBlocklist`
+     and `isEnabled`.
+  3. **Name blocklist** over `AXTitle`, `AXDescription`, `AXPlaceholderValue`,
+     `AXIdentifier` and `AXDOMIdentifier`. Credential and payment wording is
+     refused everywhere; the noisier personal-info, login and email-header
+     groups apply only to single-line fields, and the login group walks
+     ancestors and the window title. Grammarly applies its whole list to every
+     surface and pays for it with a long tail of per-app exemptions (Apple
+     Notes' `Note[id=...]` matching `\bid\b`, ChatGPT's
+     `mobile-composer-prompt` matching `mobile`); scoping the noisy half to
+     single-line fields avoids most of that.
+  4. **Per-app escape hatch**: "Check Single-Line Fields in <app>" in the menu
+     bar, which is what makes gates 1 and 3 safe to be strict about.
+
+  This is still the most app-dependent part of the code. `log show` prints the
+  reason for every refusal.
 - **Browsers and Electron**: `AXEnhancedUserInterface` and
   `AXManualAccessibility` are set on each watched app so Chromium enables its
   accessibility tree.

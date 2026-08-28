@@ -60,6 +60,35 @@ selections stop reacting.
 4. A non-activating floating panel shows the result near the selection without stealing focus.
 5. Accept writes the text back through the Accessibility API, with a clipboard-paste fallback for apps that ignore it (most Electron apps).
 
+## Where Quill checks
+
+Multi-line editors and rich-text areas are checked by default. Single-line text
+fields and combo boxes are not: an address bar, a login box, a search field and
+a form input are all the same accessibility role, and a card over any of them is
+noise. If an app's real writing happens on one line, turn it on with **Check
+Single-Line Fields in <app>** in the menu bar.
+
+Fields whose accessibility name looks like a credential or a payment detail are
+never checked, in any app. Names that merely look like a form field (`email`,
+`phone`, `sign in`, `to`) are refused on single-line fields only.
+
+For finer control, drop a `FieldPolicy.json` in
+`~/Library/Application Support/Quill/`:
+
+```json
+[
+  { "bundleID": "^com\\.example\\.app$",
+    "elementName": "^title$",
+    "allowSingleLine": true,
+    "notes": "Titles are the whole document here" }
+]
+```
+
+`bundleID` and `elementName` are case-insensitive regexes; omit either to match
+anything. `ignoreNameBlocklist` re-enables a surface the blocklist wrongly
+refuses, and `"isEnabled": false` refuses one outright. A malformed file is
+ignored with a note in the log.
+
 ## Limitations
 
 - Google Docs draws text on a canvas and exposes nothing to the Accessibility API. No AX-based tool can work there.
@@ -73,12 +102,14 @@ selections stop reacting.
 Sources/Quill/
   AppDelegate.swift        wires everything together
   SelectionWatcher.swift   AXObserver, debounced selection and typing events
-  AXSupport.swift          Accessibility helpers, editability detection
+  AXSupport.swift          Accessibility helpers, field surface classification
+  FieldPolicy.swift        which fields get checked: roles, rules, name blocklist
   TextReplacer.swift       in-place replacement with paste fallback
   Engines/                 WritingEngine protocol + FoundationModelsEngine
   Diff/WordDiff.swift      word-level LCS diff and highlighting
   UI/                      suggestion panel, card, badge
 scripts/make-app.sh        build, bundle, sign, install to /Applications
+scripts/check-policy.sh    offline checks for the FieldPolicy decision table
 scripts/render-icon.swift  renders the app icon with SwiftUI
 ```
 
