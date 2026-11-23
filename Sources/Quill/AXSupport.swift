@@ -177,6 +177,24 @@ enum AX {
         return collected
     }
 
+    /// True when the element has an `AXWebArea` ancestor, i.e. it belongs to
+    /// a rendered page rather than the app's native UI. Safari, Chromium and
+    /// Firefox all root page content in an `AXWebArea`. Pages nest deeply, so
+    /// running out of depth before reaching the window counts as web content:
+    /// native toolbars are shallow.
+    static func isInWebContent(_ element: AXUIElement, depth: Int = 64) -> Bool {
+        var current = element
+        for _ in 0..<depth {
+            guard let next = parent(of: current) else { return false }
+            switch role(of: next) {
+            case "AXWebArea": return true
+            case "AXWindow", "AXApplication": return false
+            default: current = next
+            }
+        }
+        return true
+    }
+
     /// Bounds of the current selection, converted from AX (top-left origin,
     /// global) to Cocoa (bottom-left origin) screen coordinates.
     static func selectionBoundsCocoa(of element: AXUIElement) -> CGRect? {

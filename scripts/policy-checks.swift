@@ -15,10 +15,12 @@ func run() {
                _ names: [String],
                bundleID: String? = "com.example.app",
                ancestors: [String] = [],
+               inWebContent: Bool = true,
                expect: Bool) {
         let ctx = FieldPolicy.FieldContext(
             surface: surface, bundleID: bundleID, names: names,
-            ancestorNames: { names + ancestors }
+            ancestorNames: { names + ancestors },
+            isInWebContent: { inWebContent }
         )
         let d = policy.evaluate(ctx)
         let ok = d.isAllowed == expect
@@ -34,6 +36,18 @@ func run() {
           bundleID: "com.google.Chrome", expect: false)
     check("unnamed single-line field", .singleLine, [], expect: false)
     check("search field / label", .ineligible, ["anything"], expect: false)
+
+    print("\n— browser UI vs page content —")
+    check("Dia command bar (text area outside the page)", .prose, [],
+          bundleID: "company.thebrowser.dia", inWebContent: false, expect: false)
+    check("Dia page textarea", .prose, ["comment"],
+          bundleID: "company.thebrowser.dia", inWebContent: true, expect: true)
+    check("Chrome native text area outside the page", .prose, ["Ask anything"],
+          bundleID: "com.google.Chrome", inWebContent: false, expect: false)
+    check("Safari page textarea", .prose, ["Message Body"],
+          bundleID: "com.apple.Safari", inWebContent: true, expect: true)
+    check("non-browser native text area is unaffected", .prose, ["Message Body"],
+          bundleID: "com.apple.Notes", inWebContent: false, expect: true)
 
     print("\n— gate 2: rules —")
     check("Mail subject line", .singleLine, ["Subject"],

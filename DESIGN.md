@@ -52,8 +52,10 @@ remains as a seam in case that ever changes.
      (`AXEditableAncestor`, or an unrecognised role with a settable value) are
      prose and pass by default. `AXTextField` and `AXComboBox` are single-line
      and are **off unless the app is opted in**. Search fields, labels, secure
-     fields and read-only views never pass. This gate alone is what stops the
-     address-bar popups.
+     fields and read-only views never pass. In a browser, a field must also
+     sit under an `AXWebArea`: the browser's own UI (Dia's command bar is an
+     `AXTextArea`, so role alone lets it through) is never checked, only text
+     the page renders.
   2. **Override rules**, bundled in `FieldPolicy.defaultRules` and extensible
      from `~/Library/Application Support/Quill/FieldPolicy.json`. Regex on
      bundle ID and element name, with `allowSingleLine`, `ignoreNameBlocklist`

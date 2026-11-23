@@ -54,6 +54,10 @@ final class FieldPolicy {
 
     // MARK: - Rules
 
+    /// Browsers whose own UI (address bar, command bar, find bar) must never
+    /// be checked. In these apps only text inside the page itself counts.
+    static let browserBundleIDs = #"^com\.apple\.Safari|^com\.google\.Chrome|^org\.chromium\.Chromium$|^company\.thebrowser\.(Browser|dia)$|^com\.brave\.Browser|^org\.mozilla\.firefox|^com\.microsoft\.edgemac|^com\.vivaldi\.Vivaldi$|^com\.operasoftware\.Opera|^com\.kagi\.kagimacOS$|^app\.zen-browser\.zen$"#
+
     /// Surfaces worth a rule out of the box. Everything here is a single-line
     /// field that carries real prose, which is the only category the role gate
     /// refuses for the wrong reason.
@@ -68,9 +72,9 @@ final class FieldPolicy {
         FieldRule(bundleID: #"^com\.apple\.mail$|^com\.microsoft\.Outlook$"#,
                   ignoreNameBlocklist: true,
                   notes: "Mail window titles are message subjects, not form labels"),
-        // Belt and braces. Browser chrome is single-line and so already off,
-        // but an address bar is the one surface that must never be checked.
-        FieldRule(bundleID: #"^com\.apple\.Safari$|^com\.google\.Chrome|^company\.thebrowser\.Browser$|^com\.brave\.Browser$|^org\.mozilla\.firefox$|^com\.microsoft\.edgemac$"#,
+        // Belt and braces. Browser chrome is already refused by the web-content
+        // check, but an address bar is the one surface that must never be checked.
+        FieldRule(bundleID: browserBundleIDs,
                   elementName: #"address|location|\burl\b|search|^omnibox$"#, isEnabled: false,
                   notes: "browser chrome is never a writing surface"),
     ]
@@ -162,13 +166,18 @@ final class FieldPolicy {
         /// Ancestor names, read lazily: the walk costs several AX round trips
         /// and most decisions never need it.
         let ancestorNames: () -> [String]
+        /// Whether the element sits inside a rendered web page rather than
+        /// the host app's own UI. Read lazily, and only for browsers.
+        let isInWebContent: () -> Bool
 
         init(surface: FieldSurface, bundleID: String?, names: [String],
-             ancestorNames: @escaping () -> [String] = { [] }) {
+             ancestorNames: @escaping () -> [String] = { [] },
+             isInWebContent: @escaping () -> Bool = { true }) {
             self.surface = surface
             self.bundleID = bundleID
             self.names = names
             self.ancestorNames = ancestorNames
+            self.isInWebContent = isInWebContent
         }
     }
 
@@ -177,7 +186,8 @@ final class FieldPolicy {
             surface: AX.surface(of: element),
             bundleID: bundleID,
             names: AX.names(of: element),
-            ancestorNames: { AX.namesIncludingAncestors(of: element) }
+            ancestorNames: { AX.namesIncludingAncestors(of: element) },
+            isInWebContent: { AX.isInWebContent(element) }
         ))
     }
 
@@ -190,6 +200,14 @@ final class FieldPolicy {
         }
         guard context.surface != .ineligible else {
             return PolicyDecision(isAllowed: false, reason: "not a writing surface")
+        }
+        // Browser UI is not writing, whatever role it reports. Dia's command
+        // bar is an AXTextArea, so the single-line gate never sees it, and its
+        // name gives nothing reliable to match. Structure does: every field a
+        // page renders sits under an AXWebArea, and the browser's own controls
+        // never do.
+        if matches(Self.browserBundleIDs, in: [context.bundleID ?? ""]) && !context.isInWebContent() {
+            return PolicyDecision(isAllowed: false, reason: "browser UI, not page content")
         }
 
         var cachedAncestors: [String]?
